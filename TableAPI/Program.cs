@@ -1,7 +1,9 @@
 ﻿using Microsoft.Azure.Cosmos.Table;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading;
@@ -11,14 +13,37 @@ namespace TableAPI
 {
     class Program
     {
-        // Azure Cosmos DB Table API 接続文字列
-        private static readonly string ConnectionString = "";
-        private static readonly string TableName = "test2";
+        // 設定
+        private static IConfiguration Configuration { get; set; }
+        private static readonly string ConnectionString;
+        private static readonly string TableName;
+        private static readonly int MaxWorkers;
+        private static readonly int BatchSize;
+        private static readonly int NumBatches;
 
-        // 並列処理設定
-        private static readonly int MaxWorkers = 5; // 並列処理数（必要に応じて変更）
-        private static readonly int BatchSize = 100; // 一括投入のバッチサイズ(変更しないこと)
-        private static readonly int NumBatches = 100; // バッチの回数
+        // 静的コンストラクタで設定を読み込む
+        static Program()
+        {
+            // 設定ファイルを読み込む
+            Configuration = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
+
+            // Azure Table 設定の読み込み
+            ConnectionString = Configuration["AzureTableConfig:ConnectionString"] ?? throw new InvalidOperationException("接続文字列が設定されていません");
+            TableName = Configuration["AzureTableConfig:TableName"] ?? "test2";
+
+            // バッチ処理設定の読み込み
+            if (!int.TryParse(Configuration["BatchConfig:MaxWorkers"], out MaxWorkers))
+                MaxWorkers = 5;
+
+            if (!int.TryParse(Configuration["BatchConfig:BatchSize"], out BatchSize))
+                BatchSize = 100;
+
+            if (!int.TryParse(Configuration["BatchConfig:NumBatches"], out NumBatches))
+                NumBatches = 100;
+        }
 
         // スレッドセーフな CloudTableClient へのアクセス
         private static readonly ThreadLocal<CloudTable> ThreadLocalTableClient = new(() =>
